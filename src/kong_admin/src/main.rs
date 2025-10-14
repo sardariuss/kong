@@ -204,7 +204,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let base_delay_secs = settings.db_updates_delay_secs.unwrap_or(10);
             let mut retry_delay_secs = base_delay_secs;
             const MAX_RETRY_DELAY_SECS: u64 = 300; // 5 minutes max
-            const OPERATION_TIMEOUT_SECS: u64 = 60;
+            const OPERATION_TIMEOUT_SECS: u64 = 300;
             const SYNC_STATE_SAVE_INTERVAL: u64 = 10; // Save sync state every 10 updates
 
             // Load last sync point from database, or start from beginning
