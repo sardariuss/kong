@@ -94,5 +94,11 @@
     "staging_fe": "guktk-fqaaa-aaaao-a4goa-cai",
     "staging": "guktk-fqaaa-aaaao-a4goa-cai",
     "ic": "guktk-fqaaa-aaaao-a4goa-cai"
+  },
+  "ic_siwe_provider": {
+    "local": "r4zqx-aiaaa-aaaar-qbuia-cai",
+    "staging": "r4zqx-aiaaa-aaaar-qbuia-cai",
+    "staging_fe": "r4zqx-aiaaa-aaaar-qbuia-cai",
+    "ic": "r4zqx-aiaaa-aaaar-qbuia-cai"
   }
 }
