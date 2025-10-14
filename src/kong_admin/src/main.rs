@@ -53,10 +53,11 @@ async fn load_sync_state(pool: &Pool) -> Result<Option<u64>, Box<dyn std::error:
         )
         .await?;
 
-    // Load current sync state
-    let row = client
-        .query_opt("SELECT last_db_update_id FROM sync_state WHERE id = 1", &[])
+    // Load current sync state using prepared statement cache
+    let stmt = client
+        .prepare_cached("SELECT last_db_update_id FROM sync_state WHERE id = 1")
         .await?;
+    let row = client.query_opt(&stmt, &[]).await?;
 
     match row {
         Some(row) => {
@@ -74,16 +75,18 @@ async fn load_sync_state(pool: &Pool) -> Result<Option<u64>, Box<dyn std::error:
 async fn save_sync_state(pool: &Pool, last_db_update_id: u64) -> Result<(), Box<dyn std::error::Error>> {
     let client = pool.get().await?;
 
-    client
-        .execute(
+    // Use prepared statement cache for better performance
+    let stmt = client
+        .prepare_cached(
             "INSERT INTO sync_state (id, last_db_update_id, last_updated_at)
             VALUES (1, $1, CURRENT_TIMESTAMP)
             ON CONFLICT (id) DO UPDATE SET
                 last_db_update_id = $1,
-                last_updated_at = CURRENT_TIMESTAMP",
-            &[&(last_db_update_id as i64)],
+                last_updated_at = CURRENT_TIMESTAMP"
         )
         .await?;
+
+    client.execute(&stmt, &[&(last_db_update_id as i64)]).await?;
 
     Ok(())
 }
@@ -122,8 +125,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let start = std::time::Instant::now();
 
         tokio::try_join!(
-            users::update_users(&kong_data),
             tokens::update_tokens(&kong_data),
+            users::update_users(&kong_data),
             pools::update_pools(&kong_data),
             lp_tokens::update_lp_tokens(&kong_data),
             requests::update_requests(&kong_data),
@@ -148,8 +151,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let start = std::time::Instant::now();
 
         tokio::try_join!(
-            users::update_users(&kong_backend),
             tokens::update_tokens(&kong_backend),
+            users::update_users(&kong_backend),
             pools::update_pools(&kong_backend),
             lp_tokens::update_lp_tokens(&kong_backend),
             requests::update_requests(&kong_backend),
@@ -173,8 +176,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             // Sequential execution due to dependencies
             let db_client = pool.get().await?;
-            users::update_users_on_database(&db_client).await?;
             tokens_map = tokens::update_tokens_on_database(&db_client).await?;
+            users::update_users_on_database(&db_client).await?;
             pools_map = pools::update_pools_on_database(&db_client, &tokens_map).await?;
 
             // Sequential execution to prevent database deadlocks
@@ -226,7 +229,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut updates_since_save = 0u64;
 
             // Get database connection once and reuse it
-            let mut client = pool.get().await?;
+            let client = pool.get().await?;
 
             // loop forever and update database
             loop {
@@ -269,33 +272,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 error!("DB update failed: {}", err);
                                 retry_delay_secs = (retry_delay_secs * 2).min(MAX_RETRY_DELAY_SECS);
                                 warn!("Retrying in {}s (exponential backoff)", retry_delay_secs);
-
-                                // Reconnect on error to ensure fresh connection
-                                match pool.get().await {
-                                    Ok(new_client) => {
-                                        client = new_client;
-                                        info!("Database connection refreshed after error");
-                                    }
-                                    Err(e) => {
-                                        error!("Failed to reconnect to database: {}", e);
-                                    }
-                                }
+                                // Pool's RecyclingMethod::Fast handles connection health automatically
                             }
                             Err(_) => {
                                 error!("DB update timed out after {}s", OPERATION_TIMEOUT_SECS);
                                 retry_delay_secs = (retry_delay_secs * 2).min(MAX_RETRY_DELAY_SECS);
                                 warn!("Retrying in {}s (exponential backoff)", retry_delay_secs);
-
-                                // Reconnect on timeout to ensure fresh connection
-                                match pool.get().await {
-                                    Ok(new_client) => {
-                                        client = new_client;
-                                        info!("Database connection refreshed after timeout");
-                                    }
-                                    Err(e) => {
-                                        error!("Failed to reconnect to database: {}", e);
-                                    }
-                                }
+                                // Pool's RecyclingMethod::Fast handles connection health automatically
                             }
                         }
 
