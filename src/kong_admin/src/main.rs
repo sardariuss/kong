@@ -229,7 +229,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut updates_since_save = 0u64;
 
             // Get database connection once and reuse it
-            let client = pool.get().await?;
+            let mut client = pool.get().await?;
 
             // loop forever and update database
             loop {
@@ -248,7 +248,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                     result = timeout(
                         Duration::from_secs(OPERATION_TIMEOUT_SECS),
-                        get_db_updates(last_db_update_id, &kong_data, &client, &mut tokens_map, &mut pools_map)
+                        get_db_updates(last_db_update_id, &kong_data, &mut client, &mut tokens_map, &mut pools_map)
                     ) => {
                         match result {
                             Ok(Ok(db_update_id)) => {
